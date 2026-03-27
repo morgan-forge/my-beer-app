@@ -56,3 +56,6 @@ Desktop.ini
 tmp/
 temp/
 .cache/
+
+# ── Deliberate: no README in this public repo ──
+README.md
