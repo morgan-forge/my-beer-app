@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+	<meta name="theme-color" content="#0f0e09">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+	<title>My Beer</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="styles.css">
+	<link rel="manifest" href="manifest.json">
+</head>
+
+<body>
+	<div id="landing" class="landing">
+		<div class="landing-inner">
+			<h1>My Beer</h1>
+			<p>Load your beer stock and/or ratings to get started.</p>
+			<p class="landing-hint">Stock: <strong>beer-in-stock.json</strong>. Ratings: Untappd export (JSON array of check-ins with <code>bid</code>, <code>rating_score</code>, <code>created_at</code>).</p>
+			<button id="btnLoadStock" class="landing-btn" type="button">Load stock</button>
+			<button id="btnLoadRatings" class="landing-btn landing-btn-secondary" type="button">Load ratings</button>
+			<input id="stockFileInput" type="file" accept=".json,application/json,text/plain" hidden>
+			<input id="ratingsFileInput" type="file" accept=".json,application/json,text/plain" hidden>
+		</div>
+	</div>
+	<div id="appContent" class="app-content hidden">
+		<div class="sticky-top">
+			<header>
+				<div class="header-main-row">
+					<h1>My Beer</h1>
+					<div class="mode-toggle" role="tablist">
+						<button type="button" role="tab" id="tabStock" class="mode-tab active" aria-selected="true"><span class="mode-tab-inner" aria-hidden="true">🍺</span> Beer in Stock</button>
+						<button type="button" role="tab" id="tabRatings" class="mode-tab" aria-selected="false"><span class="mode-tab-inner" aria-hidden="true">📓</span> Beer Journal</button>
+					</div>
+				</div>
+				<div id="beerStats" class="beer-stats"></div>
+			</header>
+			<div id="loadStockPrompt" class="load-prompt hidden">
+				<p>Load <strong>beer-in-stock.json</strong> to view stock.</p>
+				<button type="button" id="btnLoadStockInApp" class="landing-btn">Load stock file</button>
+			</div>
+			<div id="loadRatingsPrompt" class="load-prompt hidden">
+				<p>Load your Untappd ratings export (JSON array of check-ins).</p>
+				<button type="button" id="btnLoadRatingsInApp" class="landing-btn">Load ratings file</button>
+			</div>
+
+			<div id="locationRow" class="location-row hidden">
+				<button type="button" class="location-btn active" id="locAll" data-loc="all">All</button>
+				<button type="button" class="location-btn" id="locCupboard" data-loc="cupboard">Cupboard</button>
+				<button type="button" class="location-btn" id="locFridge" data-loc="fridge">Fridge</button>
+				<button type="button" class="location-btn" id="locDrank" data-loc="drank" aria-label="Recently drank">Drank</button>
+				<button type="button" class="location-btn" id="locArchive" data-loc="archive" aria-label="Archived drinks">Archive</button>
+			</div>
+
+			<div class="controls">
+				<div class="search-container">
+					<input type="text" id="searchInput" placeholder="Search beer or brewery..." autocomplete="off">
+					<button id="clearSearch" class="clear-btn" type="button">✕</button>
+				</div>
+				<div class="sort-row" id="stockSortRow">
+					<button class="sort-btn active" id="sortAlpha" type="button" aria-label="Sort alphabetically">🔤</button>
+					<button class="sort-btn" id="sortAbv" type="button">% ABV</button>
+					<button class="sort-btn" id="sortQty" type="button">📦 Qty</button>
+					<button class="sort-btn sort-btn-ratings hidden" id="sortRating" type="button">★ Rating</button>
+					<button class="sort-btn sort-btn-ratings hidden" id="sortDate" type="button">📅 Date</button>
+					<button class="sort-btn" id="sortStyle" type="button">🍺 Style</button>
+				</div>
+				<div class="filter-row filter-toolbar" role="toolbar" aria-label="View and filters">
+					<div id="stockLayoutRow" class="toolbar-layout hidden" aria-label="Stock view layout">
+						<div class="segment-row segment-row--toolbar" role="tablist">
+							<button type="button" id="layoutList" class="segment-btn active" role="tab" aria-selected="true">List</button>
+							<button type="button" id="layoutShelf" class="segment-btn" role="tab" aria-selected="false">Shelf</button>
+						</div>
+					</div>
+					<button class="filter-toggle" id="filterToggle" type="button">
+						<span id="filterLabel">Filter</span>
+						<span id="filterArrow" class="filter-arrow">▾</span>
+					</button>
+					<button type="button" id="btnUpload" class="btn-upload-subtle">Upload</button>
+					<span id="filterCount" class="filter-count">showing all</span>
+				</div>
+			</div>
+
+			<div id="filterPanel" class="filter-panel">
+				<div class="filter-section">
+					<div class="filter-section-label">STYLE</div>
+					<div class="chip-row" id="chipsStyle"></div>
+				</div>
+				<div class="filter-section">
+					<div class="filter-section-label">BREWERY</div>
+					<div class="chip-row" id="chipsBrewery"></div>
+				</div>
+				<div class="filter-done-row">
+					<button id="filterClearAll" class="filter-clear-btn" type="button">Clear all</button>
+					<button id="filterDone" class="filter-done-btn" type="button">Done ✓</button>
+				</div>
+			</div>
+		</div>
+
+		<div id="journalDashboard" class="journal-dashboard hidden" aria-label="Journal palate dashboard"></div>
+		<div id="journalSortArea" class="hidden">
+			<div class="journal-sort-bar" id="journalSortBar" role="toolbar" aria-label="Journal sort"></div>
+		</div>
+
+		<div class="list" id="beerList"><p style="color:var(--text-dim);padding:20px;">Loading…</p></div>
+	</div>
+
+	<div id="stockToast" class="stock-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+	<script src="app.js"></script>
+</body>
+
+</html>

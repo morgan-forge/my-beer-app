@@ -1,0 +1,12 @@
+{
+	"name": "My Beer",
+	"short_name": "My Beer",
+	"description": "Beer stock – load beer-in-stock.json",
+	"start_url": "./index.html",
+	"display": "standalone",
+	"orientation": "portrait",
+	"theme_color": "#1a1a0a",
+	"background_color": "#1a1a0a",
+	"scope": "./",
+	"icons": []
+}

@@ -1,0 +1,58 @@
+# ── Python ──
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# ── Generated / baked app (may embed personal stock & ratings) ──
+standalone.html
+
+# ── Personal beer data (never commit to a public repo) ──
+# Core app inputs — keep local or use private storage / secrets.
+beer-in-stock.json
+ratings-in-stock.json
+cellar.json
+
+# Optional: private data folder if you symlink or copy exports here
+beer-data-files-private/
+**/beer-data-files-private/
+
+# ── Script outputs & one-off verification pages (regenerable) ──
+untappd-image-results.json
+untappd-image-results.html
+premierhop-image-results.json
+premierhop-image-results.html
+google-cse-image-results.json
+google-cse-image-results.html
+brewery-image-results.json
+brewery-image-results.html
+
+# ── Secrets (e.g. Google CSE env-based scripts) ──
+.env
+.env.*
+!.env.example
+
+# ── OS & editor ──
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── Logs & temp ──
+*.log
+tmp/
+temp/
+.cache/
