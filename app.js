@@ -1451,22 +1451,17 @@
 		}).filter(Boolean);
 	}
 
-	function mergeImportedStockWithDevice(normalisedRows, prev) {
-		var prevById = {};
-		(prev || []).forEach(function (p) {
-			if (p && p.item_id != null) prevById[Number(p.item_id)] = p;
-		});
+	function mergeImportedStockWithDevice(normalisedRows) {
 		var out = [];
 		(normalisedRows || []).forEach(function (b) {
 			if (!b || b.item_id == null) return;
-			var id = Number(b.item_id);
 			var row = {
 				beer_name: b.beer_name,
 				brewery_name: b.brewery_name,
 				beer_type: b.beer_type,
 				beer_abv: b.beer_abv,
 				beer_ibu: b.beer_ibu,
-				item_id: id,
+				item_id: Number(b.item_id),
 				image_url: b.image_url,
 				image_source: b.image_source,
 				untappd_url: b.untappd_url,
@@ -1476,24 +1471,15 @@
 				created_at: b.created_at,
 				comment: b.comment
 			};
-			var p = prevById[id];
-			if (p) {
-				row.stock_location_unspecified = !!p.stock_location_unspecified;
-				if (p.stock_location_unspecified) {
-					row.in_fridge = null;
-					row.in_cupboard = null;
-					row.quantity = typeof p.quantity === 'number' ? p.quantity : (parseInt(p.quantity, 10) || 0);
-				} else {
-					row.in_fridge = p.in_fridge != null ? Number(p.in_fridge) : 0;
-					row.in_cupboard = p.in_cupboard != null ? Number(p.in_cupboard) : 0;
-					row.quantity = row.in_fridge + row.in_cupboard;
-				}
+			row.stock_location_unspecified = !!b.stock_location_unspecified;
+			if (row.stock_location_unspecified) {
+				row.in_fridge = null;
+				row.in_cupboard = null;
+				row.quantity = typeof b.quantity === 'number' ? b.quantity : (parseInt(b.quantity, 10) || 0);
 			} else {
-				var qty = typeof b.quantity === 'number' ? b.quantity : (parseInt(b.quantity, 10) || 0);
-				row.stock_location_unspecified = false;
-				row.in_fridge = 0;
-				row.in_cupboard = qty;
-				row.quantity = qty;
+				row.in_fridge = b.in_fridge != null ? Number(b.in_fridge) : 0;
+				row.in_cupboard = b.in_cupboard != null ? Number(b.in_cupboard) : 0;
+				row.quantity = row.in_fridge + row.in_cupboard;
 			}
 			if (row.quantity > 0) out.push(row);
 		});
@@ -1812,7 +1798,7 @@
 	function applyStockData(normalised) {
 		loadRecentlyDrankFromStorage();
 		loadDrankArchiveFromStorage();
-		stockBeers = mergeImportedStockWithDevice(normalised, stockBeers);
+		stockBeers = mergeImportedStockWithDevice(normalised);
 		mode = 'stock';
 		setBeersFromMode();
 		updateStats();
