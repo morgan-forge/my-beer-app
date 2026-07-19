@@ -1869,7 +1869,11 @@
 		reader.readAsText(file);
 	}
 
+	var pickersWired = false;
+
 	function wireLandingAndPickers() {
+		if (pickersWired) return;
+		pickersWired = true;
 		var btnStock = get('btnLoadStock');
 		var btnRatings = get('btnLoadRatings');
 		var stockInput = get('stockFileInput');
@@ -1997,6 +2001,7 @@
 
 	function start() {
 		loadStockViewPrefs();
+		wireLandingAndPickers();
 
 		if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 			navigator.serviceWorker.register('sw.js').catch(function () {});
