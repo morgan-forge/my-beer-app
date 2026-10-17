@@ -50,6 +50,9 @@
 	var journalSortDir = 1;
 	var journalSortBarWired = false;
 	var journalTasteMapWired = false;
+	var JOURNAL_LIST_CAP = 10;
+	var journalShowAll = false;
+	var journalPalateOpen = true;
 	var JOURNAL_SORTS = [
 		{ key: 'date', icon: '📅', label: 'Date' },
 		{ key: 'rating', icon: '★', label: 'Rating' },
@@ -65,6 +68,19 @@
 			if (typeof localStorage === 'undefined') return;
 			var sl = localStorage.getItem('mybeer_stock_layout');
 			if (sl === 'list' || sl === 'shelf') stockLayout = sl;
+		} catch (e) {}
+	}
+
+	function loadJournalViewPrefs() {
+		try {
+			if (typeof localStorage === 'undefined') return;
+			if (localStorage.getItem('mybeer_palate_open') === '0') journalPalateOpen = false;
+		} catch (e) {}
+	}
+
+	function saveJournalViewPrefs() {
+		try {
+			if (typeof localStorage !== 'undefined') localStorage.setItem('mybeer_palate_open', journalPalateOpen ? '1' : '0');
 		} catch (e) {}
 	}
 
@@ -85,11 +101,17 @@
 		beers = mode === 'stock' ? stockBeers : ratingBeers;
 	}
 
+	/** Untappd's generic "Insiders" banner: some brewery pages serve it instead of a logo. Treat as no image. */
+	function isUntappdPromoImage(url) {
+		return String(url || '').indexOf('insiders.untappd.com') >= 0;
+	}
+
 	function getImageUrl(b) {
-		if (b.image_url) return b.image_url;
+		if (b.image_url && !isUntappdPromoImage(b.image_url)) return b.image_url;
 		if (mode === 'ratings' && b.item_id) {
 			for (var i = 0; i < stockBeers.length; i++) {
-				if (stockBeers[i].item_id === b.item_id && stockBeers[i].image_url) return stockBeers[i].image_url;
+				var stockImg = stockBeers[i].image_url;
+				if (stockBeers[i].item_id === b.item_id && stockImg && !isUntappdPromoImage(stockImg)) return stockImg;
 			}
 		}
 		return null;
@@ -345,46 +367,63 @@
 			var metric = metricKey === 'score'
 				? br.avg.toFixed(2) + '★'
 				: String(br.count);
+			var active = activeFilters.brewery.has(br.name);
 			html +=
-				'<div class="palate-rank-row' + (rank <= 3 ? ' palate-rank-row--top' : '') + '">' +
+				'<button type="button" class="palate-rank-row' + (rank <= 3 ? ' palate-rank-row--top' : '') + (active ? ' palate-rank-row--active' : '') + '" ' +
+				'data-brewery="' + encodeURIComponent(br.name) + '" aria-pressed="' + active + '">' +
 				'<span class="palate-rank-num">' + rank + '</span>' +
 				'<span class="palate-rank-name" title="' + escapeHtml(br.name) + '">' + escapeHtml(br.name) + '</span>' +
 				'<span class="palate-rank-metric">' + metric + '</span>' +
-				'</div>';
+				'</button>';
 		});
 		html += '</div></div>';
 		return html;
 	}
 
+	/** Journal top: brewery rankings. Tap a row to filter the list below; the palate charts render after the list. */
 	function renderDashboard() {
 		var el = get('journalDashboard');
 		if (!el) return;
-		if (!ratingBeers.length) {
+		var stats = ratingBeers.length ? computeStats(ratingBeers) : null;
+		if (!stats) {
 			el.innerHTML = '';
+			renderPalate(null);
 			return;
 		}
-		var stats = computeStats(ratingBeers);
+		el.innerHTML =
+			'<div class="journal-dash-stack">' +
+			'<div class="dash-card wide dash-card--palate-ranks">' +
+			'<div class="dash-lbl dash-lbl--split"><span>Brewery rankings</span><span class="dash-hint">tap to filter ↓</span></div>' +
+			'<div class="palate-rank-split">' +
+			buildPalateRankColumn('By your score', '', stats.byScoreBreweries || [], 'score') +
+			buildPalateRankColumn('Check-ins', '', stats.byQtyBreweries || [], 'qty') +
+			'</div></div>' +
+			'</div>';
+		renderPalate(stats);
+	}
+
+	/** Journal bottom, after the list: rating distribution, taste map, then the counts. Foldable. */
+	function renderPalate(stats) {
+		var el = get('journalPalate');
+		if (!el) return;
 		if (!stats) {
 			el.innerHTML = '';
 			return;
 		}
-		var dualHTML =
-			'<div class="dash-card wide dash-card--palate-ranks">' +
-			'<div class="dash-lbl">Brewery rankings</div>' +
-			'<div class="palate-rank-split">' +
-			buildPalateRankColumn('By your score', '', stats.byScoreBreweries || [], 'score') +
-			buildPalateRankColumn('Check-ins', '', stats.byQtyBreweries || [], 'qty') +
-			'</div></div>';
-		el.innerHTML =
-			'<div class="journal-dash-stack">' +
-			'<div class="dashboard-grid">' +
-			dualHTML +
-			'<div class="dash-card"><div class="dash-lbl">Gold tier</div><div class="dash-val">' + stats.goldCount + '</div><div class="dash-sub">4.5★ or above</div></div>' +
-			'<div class="dash-card"><div class="dash-lbl">Your journal</div><div class="dash-val">' + stats.rated.length + '</div><div class="dash-sub">' + (stats.breweryCount || 0) + ' breweries</div></div>' +
-			'<div class="dash-card wide"><div class="dash-lbl">Rating distribution</div><div class="histogram-wrap">' + buildHistogram(stats.rated) + '</div></div>' +
-			'</div>' +
-			buildTasteMapHtml(stats.rated) +
-			'</div>';
+		var html = '<button type="button" class="palate-toggle" id="palateToggle" aria-expanded="' + journalPalateOpen + '">' +
+			'<span>Your palate ' + (journalPalateOpen ? '▴' : '▾') + '</span></button>';
+		if (journalPalateOpen) {
+			html +=
+				'<div class="journal-dash-stack">' +
+				'<div class="dash-card wide"><div class="dash-lbl">Rating distribution</div><div class="histogram-wrap">' + buildHistogram(stats.rated) + '</div></div>' +
+				buildTasteMapHtml(stats.rated) +
+				'<div class="dashboard-grid">' +
+				'<div class="dash-card"><div class="dash-lbl">Gold tier</div><div class="dash-val">' + stats.goldCount + '</div><div class="dash-sub">4.5★ or above</div></div>' +
+				'<div class="dash-card"><div class="dash-lbl">Your journal</div><div class="dash-val">' + stats.rated.length + '</div><div class="dash-sub">' + (stats.breweryCount || 0) + ' breweries</div></div>' +
+				'</div>' +
+				'</div>';
+		}
+		el.innerHTML = html;
 	}
 
 	function sortJournalItems(arr) {
@@ -502,10 +541,22 @@
 	}
 
 	function buildJournalExpandedInsightHtml(b) {
+		return buildJournalBreweryRankHtml(b) + buildJournalGlobalCompareHtml(b);
+	}
+
+	/** Your score beside the Untappd average, e.g. "You: 4.25 · Untappd average: 3.69 (+0.56)". */
+	function buildJournalGlobalCompareHtml(b) {
 		var gr = getJournalGlobalRating(b);
-		if (gr != null) {
-			return '<p class="journal-insight">Untappd average ★ ' + gr.toFixed(2) + '</p>';
-		}
+		if (gr == null || gr <= 0) return ''; // Untappd uses 0 for "not enough ratings yet"
+		var mine = normaliseUserRatingScoreForStorage(b.rating_score);
+		if (mine == null) return '<p class="journal-insight">Untappd average ★ ' + gr.toFixed(2) + '</p>';
+		var diff = mine - gr;
+		var diffText = (diff >= 0 ? '+' : '−') + Math.abs(diff).toFixed(2);
+		return '<p class="journal-insight">You: ' + mine.toFixed(2) + ' · Untappd average: ' + gr.toFixed(2) + ' (' + diffText + ')</p>';
+	}
+
+	/** Where this beer ranks among your journaled beers from the same brewery. */
+	function buildJournalBreweryRankHtml(b) {
 		var brewery = (b.brewery_name || '').trim();
 		if (!brewery || !ratingBeers.length) return '';
 		var bLower = brewery.toLowerCase();
@@ -626,7 +677,7 @@
 	function buildDrankCard(entry) {
 		var div = document.createElement('div');
 		div.className = 'item item--drank';
-		var imgUrl = entry.image_url;
+		var imgUrl = isUntappdPromoImage(entry.image_url) ? null : entry.image_url;
 		var imgHtml = imgUrl
 			? '<img class="item-img" src="' + escapeHtml(imgUrl) + '" alt="" loading="lazy">'
 			: '<div class="item-img item-img-placeholder">🍺</div>';
@@ -656,7 +707,7 @@
 	function buildArchiveCard(entry) {
 		var div = document.createElement('div');
 		div.className = 'item item--archive';
-		var imgUrl = entry.image_url;
+		var imgUrl = isUntappdPromoImage(entry.image_url) ? null : entry.image_url;
 		var imgHtml = imgUrl
 			? '<img class="item-img" src="' + escapeHtml(imgUrl) + '" alt="" loading="lazy">'
 			: '<div class="item-img item-img-placeholder">🍺</div>';
@@ -1164,6 +1215,8 @@
 		}
 
 		updateFilterCount(items.length, filterTotal);
+		renderJournalMore(mode === 'ratings' ? items.length : 0);
+		if (mode === 'ratings') syncBreweryRankRows();
 
 		list.innerHTML = '';
 
@@ -1217,7 +1270,7 @@
 			return;
 		}
 
-		list.className = 'list';
+		list.className = mode === 'ratings' ? 'list list--journal' : 'list';
 		var frag = document.createDocumentFragment();
 		if (mode === 'stock') {
 			if (stockLocationFilter === 'drank') {
@@ -1228,9 +1281,34 @@
 				items.forEach(function (b) { frag.appendChild(buildCard(b)); });
 			}
 		} else {
-			items.forEach(function (b) { frag.appendChild(buildJournalCard(b)); });
+			var shownItems = (!journalShowAll && items.length > JOURNAL_LIST_CAP) ? items.slice(0, JOURNAL_LIST_CAP) : items;
+			shownItems.forEach(function (b) { frag.appendChild(buildJournalCard(b)); });
 		}
 		list.appendChild(frag);
+	}
+
+	/** "Show all / Show fewer" under the journal list, which shows JOURNAL_LIST_CAP beers until expanded. */
+	function renderJournalMore(total) {
+		var el = get('journalMore');
+		if (!el) return;
+		var show = mode === 'ratings' && total > JOURNAL_LIST_CAP;
+		el.classList.toggle('hidden', !show);
+		el.innerHTML = show
+			? '<button type="button" class="journal-more-btn">' + (journalShowAll ? 'Show fewer ↑' : 'Show all ' + total + ' ↓') + '</button>'
+			: '';
+	}
+
+	/** Highlight brewery-ranking rows that match the brewery filter, in place (keeps the lists' scroll position). */
+	function syncBreweryRankRows() {
+		var el = get('journalDashboard');
+		if (!el) return;
+		el.querySelectorAll('.palate-rank-row[data-brewery]').forEach(function (row) {
+			var name = '';
+			try { name = decodeURIComponent(row.getAttribute('data-brewery') || ''); } catch (e) {}
+			var on = activeFilters.brewery.has(name);
+			row.classList.toggle('palate-rank-row--active', on);
+			row.setAttribute('aria-pressed', on ? 'true' : 'false');
+		});
 	}
 
 	function onChipClick(filterKey, value) {
@@ -1304,15 +1382,18 @@
 		if (stockSortRow) stockSortRow.classList.toggle('hidden', mode !== 'stock');
 
 		var jDash = get('journalDashboard');
+		var jPalate = get('journalPalate');
 		var jArea = get('journalSortArea');
 		var showJournalChrome = mode === 'ratings' && ratingBeers.length > 0;
 		if (jDash) jDash.classList.toggle('hidden', !showJournalChrome);
+		if (jPalate) jPalate.classList.toggle('hidden', !showJournalChrome);
 		if (jArea) jArea.classList.toggle('hidden', !showJournalChrome);
 		if (showJournalChrome) {
 			renderJournalSortBar();
 			renderDashboard();
 		} else if (mode === 'ratings' && jDash) {
 			jDash.innerHTML = '';
+			if (jPalate) jPalate.innerHTML = '';
 		}
 
 		var sortAbv = get('sortAbv');
@@ -1962,10 +2043,43 @@
 		wireChipRow('chipsBrewery', 'brewery');
 
 		var jDash = get('journalDashboard');
-		if (jDash && !journalTasteMapWired) {
-			journalTasteMapWired = true;
+		if (jDash) {
 			jDash.addEventListener('click', function (e) {
-				var detail = jDash.querySelector('#tasteMapDetail');
+				var row = e.target.closest('.palate-rank-row[data-brewery]');
+				if (!row) return;
+				var name = '';
+				try { name = decodeURIComponent(row.getAttribute('data-brewery') || ''); } catch (e1) {}
+				if (!name) return;
+				if (activeFilters.brewery.has(name)) activeFilters.brewery.delete(name);
+				else activeFilters.brewery.add(name);
+				journalShowAll = false;
+				refreshChips();
+				render();
+			});
+		}
+
+		var jMore = get('journalMore');
+		if (jMore) {
+			jMore.addEventListener('click', function (e) {
+				if (!e.target.closest('.journal-more-btn')) return;
+				var collapsing = journalShowAll;
+				journalShowAll = !journalShowAll;
+				render();
+				if (collapsing) jMore.scrollIntoView({ block: 'center' });
+			});
+		}
+
+		var jPalate = get('journalPalate');
+		if (jPalate && !journalTasteMapWired) {
+			journalTasteMapWired = true;
+			jPalate.addEventListener('click', function (e) {
+				if (e.target.closest('#palateToggle')) {
+					journalPalateOpen = !journalPalateOpen;
+					saveJournalViewPrefs();
+					renderPalate(ratingBeers.length ? computeStats(ratingBeers) : null);
+					return;
+				}
+				var detail = jPalate.querySelector('#tasteMapDetail');
 				if (!detail) return;
 				var btn = e.target.closest('.taste-dot');
 				if (btn) {
@@ -1982,7 +2096,7 @@
 						(abv !== '' ? ' · ' + escapeHtml(String(abv)) + '% ABV' : '') +
 						' · ★ ' + escapeHtml(String(r)) + '</div>';
 					detail.hidden = false;
-					jDash.querySelectorAll('.taste-dot.taste-dot--active').forEach(function (x) {
+					jPalate.querySelectorAll('.taste-dot.taste-dot--active').forEach(function (x) {
 						x.classList.remove('taste-dot--active');
 					});
 					btn.classList.add('taste-dot--active');
@@ -1991,7 +2105,7 @@
 				if (e.target.closest('.taste-map-card') && !e.target.closest('button') && !e.target.closest('.taste-map-detail')) {
 					detail.hidden = true;
 					detail.innerHTML = '';
-					jDash.querySelectorAll('.taste-dot.taste-dot--active').forEach(function (x) {
+					jPalate.querySelectorAll('.taste-dot.taste-dot--active').forEach(function (x) {
 						x.classList.remove('taste-dot--active');
 					});
 				}
@@ -2001,6 +2115,7 @@
 
 	function start() {
 		loadStockViewPrefs();
+		loadJournalViewPrefs();
 		wireLandingAndPickers();
 
 		if ('serviceWorker' in navigator && location.protocol !== 'file:') {

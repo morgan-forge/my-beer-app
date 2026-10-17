@@ -1076,7 +1076,7 @@ input:focus {
 	display: flex;
 	flex-direction: column;
 	gap: var(--palate-rank-gap, 3px);
-	max-height: calc(5 * var(--palate-rank-row-min, 30px) + 4 * var(--palate-rank-gap, 3px));
+	max-height: calc(8 * var(--palate-rank-row-min, 30px) + 7 * var(--palate-rank-gap, 3px));
 	overflow-y: auto;
 	-webkit-overflow-scrolling: touch;
 	overscroll-behavior: contain;
@@ -1101,6 +1101,16 @@ input:focus {
 	background: rgba(0, 0, 0, 0.22);
 	border: 1px solid rgba(255, 255, 255, 0.04);
 	box-sizing: border-box;
+	width: 100%;
+	flex-shrink: 0;
+	font: inherit;
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+.palate-rank-row:active {
+	background: var(--card-hover);
 }
 .palate-rank-row--top {
 	background: rgba(240, 192, 96, 0.08);
@@ -1134,6 +1144,16 @@ input:focus {
 }
 .palate-rank-row--top .palate-rank-metric {
 	color: var(--gold-dim);
+}
+.palate-rank-row.palate-rank-row--active {
+	background: var(--gold-glow);
+	border-color: var(--gold);
+}
+.palate-rank-row--active .palate-rank-name {
+	color: var(--text);
+}
+.palate-rank-row--active .palate-rank-metric {
+	color: var(--gold);
 }
 @media (max-width: 360px) {
 	.palate-rank-split {
@@ -1479,6 +1499,64 @@ input:focus {
 	font-size: 9px;
 }
 
+/* Journal: ranking hint, list cap, palate section below the list */
+.dash-lbl--split {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 8px;
+}
+.dash-hint {
+	letter-spacing: 0.2px;
+	color: var(--text-dim);
+	font-size: 10px;
+}
+.list.list--journal {
+	padding-bottom: 4px;
+}
+.journal-more {
+	padding: 6px 20px 0;
+}
+.journal-more-btn {
+	width: 100%;
+	padding: 12px;
+	border-radius: 12px;
+	border: 1px dashed rgba(212, 168, 75, 0.3);
+	background: transparent;
+	color: var(--gold);
+	font-family: 'DM Sans', system-ui, sans-serif;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+}
+.journal-palate {
+	padding: 4px 20px 150px;
+}
+.palate-toggle {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	margin: 18px 0 12px;
+	padding: 6px 0;
+	background: none;
+	border: 0;
+	font-family: 'DM Sans', system-ui, sans-serif;
+	font-size: 9px;
+	font-weight: 600;
+	letter-spacing: 2.4px;
+	text-transform: uppercase;
+	color: var(--gold-dim);
+	cursor: pointer;
+}
+.palate-toggle::before,
+.palate-toggle::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, rgba(212, 168, 75, 0.25), transparent);
+}
+
 .journal-card {
 	background: var(--card);
 	border: 1px solid var(--border-light);
@@ -1686,6 +1764,9 @@ input:focus {
 	color: var(--text-muted);
 	line-height: 1.45;
 	margin: 0 0 8px;
+}
+.journal-card .journal-insight + .journal-insight {
+	margin-top: -5px;
 }
 .journal-card .tag-row {
 	display: flex;
