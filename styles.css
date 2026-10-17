@@ -1060,6 +1060,70 @@ input:focus {
 	background: linear-gradient(90deg, transparent, rgba(212, 168, 75, 0.25), transparent);
 }
 
+/* Rating distribution: bars are buttons that filter the list by score */
+button.hist-col {
+	background: none;
+	border: 0;
+	padding: 0;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+.hist-col .hist-lbl {
+	display: block;
+}
+.hist-col--active .hist-bar {
+	outline: 2px solid var(--gold-bright);
+	outline-offset: 2px;
+}
+.hist-col--active .hist-lbl {
+	color: var(--gold-bright);
+	font-weight: 700;
+}
+.histogram--has-selection .hist-col:not(.hist-col--active) .hist-bar {
+	opacity: 0.35;
+}
+.palate-empty {
+	font-size: 11px;
+	color: var(--text-dim);
+	padding: 10px 0 4px;
+}
+
+/* "This view vs All" counts, shown while filtering */
+.journal-compare {
+	display: grid;
+	grid-template-columns: 1fr auto auto;
+	column-gap: 16px;
+	font-size: 12px;
+	margin-top: 4px;
+}
+.journal-compare > span {
+	padding: 7px 0;
+	border-bottom: 1px solid var(--border-light);
+}
+.compare-h {
+	font-size: 8.5px;
+	letter-spacing: 1.4px;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	text-align: right;
+}
+.compare-k {
+	color: var(--text-dim);
+}
+.compare-v {
+	font-family: 'Playfair Display', Georgia, serif;
+	font-weight: 700;
+	font-size: 15px;
+	color: var(--gold);
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+.compare-v--all {
+	color: var(--text-dim);
+}
+
 .journal-card {
 	background: var(--card);
 	border: 1px solid var(--border-light);

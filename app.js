@@ -26,6 +26,7 @@
 	var JOURNAL_LIST_CAP = 10;
 	var journalShowAll = false;
 	var journalPalateOpen = true;
+	var journalRatingFilter = null; // a half-star bucket (e.g. 4.5) picked by tapping the rating distribution
 	var JOURNAL_SORTS = [
 		{ key: 'date', icon: '📅', label: 'Date' },
 		{ key: 'rating', icon: '★', label: 'Rating' },
@@ -126,10 +127,18 @@
 		statsEl.textContent = ratingBeers.length + ' rated' + (lastDate ? ' · Last: ' + formatRatingDate(lastDate) : '');
 	}
 
-	function filteredBeers() {
+	/** Half-star bucket a rating falls in (as the rating distribution groups them), or null when unrated. */
+	function ratingBucket(b) {
+		var r = normaliseUserRatingScoreForStorage(b.rating_score);
+		return r == null ? null : Math.round(r * 2) / 2;
+	}
+
+	/** Beers matching the search and every active filter. skip = 'rating' leaves the score filter out, so the rating chart still shows the full spread. */
+	function filteredBeers(skip) {
 		var query = (get('searchInput') && get('searchInput').value || '').trim().toLowerCase();
 		var hasStyle = activeFilters.style.size > 0;
 		var hasBrewery = activeFilters.brewery.size > 0;
+		var byRating = journalRatingFilter != null && skip !== 'rating';
 
 		return ratingBeers.filter(function (b) {
 			if (query) {
@@ -140,12 +149,13 @@
 			}
 			if (hasStyle && !activeFilters.style.has(b.beer_type || '')) return false;
 			if (hasBrewery && !activeFilters.brewery.has(b.brewery_name || '')) return false;
+			if (byRating && ratingBucket(b) !== journalRatingFilter) return false;
 			return true;
 		});
 	}
 
 	function updateFilterCount(visible, total) {
-		var n = activeFilters.style.size + activeFilters.brewery.size;
+		var n = activeFilters.style.size + activeFilters.brewery.size + (journalRatingFilter != null ? 1 : 0);
 		var toggleEl = get('filterToggle');
 		if (toggleEl) toggleEl.classList.toggle('has-filters', n > 0);
 		var badge = get('filterBadge');
@@ -158,11 +168,15 @@
 		renderActiveFilterPills();
 	}
 
-	/** Active brewery/style filters as removable pills under the search bar. */
+	/** Active brewery/style/score filters as removable pills under the search bar. */
 	function renderActiveFilterPills() {
 		var el = get('activeFilterPills');
 		if (!el) return;
 		var html = '';
+		if (journalRatingFilter != null) {
+			html += '<button type="button" class="filter-pill" data-filter-key="rating" data-value="">' +
+				'<span class="filter-pill-name">' + journalRatingFilter + '★</span><span class="filter-pill-x" aria-hidden="true">✕</span></button>';
+		}
 		['brewery', 'style'].forEach(function (key) {
 			activeFilters[key].forEach(function (val) {
 				html += '<button type="button" class="filter-pill" data-filter-key="' + key + '" data-value="' + encodeURIComponent(val) + '">' +
@@ -216,30 +230,29 @@
 		};
 	}
 
-	function buildHistogram(rated) {
+	/** Rating distribution in half-star buckets. Each bar is a button: tap to filter the list to that score. */
+	function buildHistogram(rated, selected) {
 		var buckets = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
 		var counts = buckets.map(function (b) {
-			return rated.filter(function (d) {
-				var r = normaliseUserRatingScoreForStorage(d.rating_score);
-				return r != null && Math.round(r * 2) / 2 === b;
-			}).length;
+			return rated.filter(function (d) { return ratingBucket(d) === b; }).length;
 		});
 		var maxCount = Math.max.apply(null, counts.concat([1]));
 		var maxBarPx = 84;
 		var minBarPx = 5;
-		var html = '<div class="histogram">';
+		var html = '<div class="histogram' + (selected != null ? ' histogram--has-selection' : '') + '">';
 		buckets.forEach(function (b, i) {
 			var c = counts[i];
+			var on = selected === b;
 			var barH = c === 0 ? minBarPx : Math.round(minBarPx + (c / maxCount) * (maxBarPx - minBarPx));
 			var cls = 'hist-bar';
 			if (c === maxCount && c > 0) cls += ' hist-top';
 			else if (c > 0 && c >= maxCount * 0.65) cls += ' hist-peak';
-			html += '<div class="hist-col">' +
-				'<div class="hist-bar-track">' +
-				'<div class="' + cls + '" style="height:' + barH + 'px" title="' + b + '★: ' + c + '"></div>' +
-				'</div>' +
-				'<div class="hist-lbl">' + b + '</div>' +
-				'</div>';
+			html += '<button type="button" class="hist-col' + (on ? ' hist-col--active' : '') + '" data-rating="' + b + '" aria-pressed="' + on + '" aria-label="' + b + ' stars: ' + c + ' beers">' +
+				'<span class="hist-bar-track">' +
+				'<span class="' + cls + '" style="height:' + barH + 'px" title="' + b + '★: ' + c + '"></span>' +
+				'</span>' +
+				'<span class="hist-lbl">' + b + '</span>' +
+				'</button>';
 		});
 		html += '</div>';
 		return html;
@@ -281,7 +294,6 @@
 		var stats = ratingBeers.length ? computeStats(ratingBeers) : null;
 		if (!stats) {
 			el.innerHTML = '';
-			renderPalate(null);
 			return;
 		}
 		el.innerHTML =
@@ -293,31 +305,69 @@
 			buildPalateRankColumn('Check-ins', '', stats.byQtyBreweries || [], 'qty') +
 			'</div></div>' +
 			'</div>';
-		renderPalate(stats);
 	}
 
-	/** Journal bottom, after the list: rating distribution, taste map, then the counts. Foldable. */
-	function renderPalate(stats) {
+	/** Journal bottom, after the list: rating distribution, taste map, then the counts. Redraws with the filters; foldable. */
+	function renderPalate() {
 		var el = get('journalPalate');
 		if (!el) return;
-		if (!stats) {
+		if (!ratingBeers.length) {
 			el.innerHTML = '';
 			return;
 		}
 		var html = '<button type="button" class="palate-toggle" id="palateToggle" aria-expanded="' + journalPalateOpen + '">' +
 			'<span>Your palate ' + (journalPalateOpen ? '▴' : '▾') + '</span></button>';
 		if (journalPalateOpen) {
+			var view = filteredBeers();
+			var viewStats = computeStats(view);
+			var spread = computeStats(filteredBeers('rating'));
+			var isFiltered = view.length < ratingBeers.length;
 			html +=
 				'<div class="journal-dash-stack">' +
-				'<div class="dash-card wide"><div class="dash-lbl">Rating distribution</div><div class="histogram-wrap">' + buildHistogram(stats.rated) + '</div></div>' +
-				buildTasteMapHtml(stats.rated) +
-				'<div class="dashboard-grid">' +
-				'<div class="dash-card"><div class="dash-lbl">Gold tier</div><div class="dash-val">' + stats.goldCount + '</div><div class="dash-sub">4.5★ or above</div></div>' +
-				'<div class="dash-card"><div class="dash-lbl">Your journal</div><div class="dash-val">' + stats.rated.length + '</div><div class="dash-sub">' + (stats.breweryCount || 0) + ' breweries</div></div>' +
+				'<div class="dash-card wide"><div class="dash-lbl dash-lbl--split"><span>Rating distribution</span><span class="dash-hint">tap a bar to filter</span></div>' +
+				(spread
+					? '<div class="histogram-wrap">' + buildHistogram(spread.rated, journalRatingFilter) + '</div>'
+					: '<p class="palate-empty">No rated beers match these filters.</p>') +
 				'</div>' +
+				buildTasteMapHtml(viewStats ? viewStats.rated : []) +
+				(isFiltered ? buildJournalCompareHtml(viewStats) : buildJournalTotalsHtml()) +
 				'</div>';
 		}
 		el.innerHTML = html;
+	}
+
+	/** Gold tier and journal size for the whole journal (shown while nothing is filtered). */
+	function buildJournalTotalsHtml() {
+		var all = computeStats(ratingBeers);
+		if (!all) return '';
+		return '<div class="dashboard-grid">' +
+			'<div class="dash-card"><div class="dash-lbl">Gold tier</div><div class="dash-val">' + all.goldCount + '</div><div class="dash-sub">4.5★ or above</div></div>' +
+			'<div class="dash-card"><div class="dash-lbl">Your journal</div><div class="dash-val">' + all.rated.length + '</div><div class="dash-sub">' + (all.breweryCount || 0) + ' breweries</div></div>' +
+			'</div>';
+	}
+
+	/** "This view" against the whole journal, shown while a search or filter narrows the list. */
+	function buildJournalCompareHtml(viewStats) {
+		var all = computeStats(ratingBeers);
+		if (!all) return '';
+		var v = viewStats || { rated: [], goldCount: 0, breweryCount: 0 };
+		function avgOf(arr) {
+			if (!arr.length) return '–';
+			var total = 0;
+			arr.forEach(function (b) { total += normaliseUserRatingScoreForStorage(b.rating_score); });
+			return (total / arr.length).toFixed(2) + '★';
+		}
+		function row(label, here, everywhere) {
+			return '<span class="compare-k">' + label + '</span><span class="compare-v">' + here + '</span><span class="compare-v compare-v--all">' + everywhere + '</span>';
+		}
+		return '<div class="dash-card wide"><div class="dash-lbl">Your journal</div>' +
+			'<div class="journal-compare">' +
+			'<span></span><span class="compare-h">This view</span><span class="compare-h">All</span>' +
+			row('Beers rated', v.rated.length, all.rated.length) +
+			row('Breweries', v.breweryCount || 0, all.breweryCount || 0) +
+			row('Gold tier (4.5★+)', v.goldCount, all.goldCount) +
+			row('Average score', avgOf(v.rated), avgOf(all.rated)) +
+			'</div></div>';
 	}
 
 	function sortJournalItems(arr) {
@@ -826,6 +876,7 @@
 		var shownItems = (!journalShowAll && items.length > JOURNAL_LIST_CAP) ? items.slice(0, JOURNAL_LIST_CAP) : items;
 		shownItems.forEach(function (b) { frag.appendChild(buildJournalCard(b)); });
 		list.appendChild(frag);
+		renderPalate();
 	}
 
 	/** "Show all / Show fewer" under the journal list, which shows JOURNAL_LIST_CAP beers until expanded. */
@@ -902,6 +953,7 @@
 	function clearAllFilters() {
 		activeFilters.style.clear();
 		activeFilters.brewery.clear();
+		journalRatingFilter = null;
 		refreshChips();
 		render();
 	}
@@ -1067,7 +1119,8 @@
 				var key = pill.getAttribute('data-filter-key');
 				var val = '';
 				try { val = decodeURIComponent(pill.getAttribute('data-value') || ''); } catch (e1) {}
-				if (activeFilters[key]) activeFilters[key].delete(val);
+				if (key === 'rating') journalRatingFilter = null;
+				else if (activeFilters[key]) activeFilters[key].delete(val);
 				refreshChips();
 				render();
 			});
@@ -1113,7 +1166,17 @@
 				if (e.target.closest('#palateToggle')) {
 					journalPalateOpen = !journalPalateOpen;
 					saveJournalViewPrefs();
-					renderPalate(ratingBeers.length ? computeStats(ratingBeers) : null);
+					renderPalate();
+					return;
+				}
+				var bar = e.target.closest('.hist-col[data-rating]');
+				if (bar) {
+					var score = parseFloat(bar.getAttribute('data-rating'));
+					journalRatingFilter = journalRatingFilter === score ? null : score;
+					journalShowAll = false;
+					render();
+					var chart = jPalate.querySelector('.histogram');
+					if (chart) chart.scrollIntoView({ block: 'center' });
 					return;
 				}
 				var detail = jPalate.querySelector('#tasteMapDetail');
