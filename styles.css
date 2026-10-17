@@ -880,6 +880,58 @@ input:focus {
 	border: 1px solid rgba(15, 14, 9, 0.85);
 	flex-shrink: 0;
 }
+
+/* Taste map: type buttons (they filter the list too) and faint dots for the other types */
+.taste-type-chips {
+	display: flex;
+	gap: 6px;
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	scrollbar-width: none;
+	margin: 2px -14px 10px;
+	padding: 0 14px;
+}
+.taste-type-chips::-webkit-scrollbar {
+	display: none;
+}
+.taste-type-chip {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	border-radius: 999px;
+	border: 1px solid var(--border-light);
+	background: rgba(0, 0, 0, 0.25);
+	color: var(--text-dim);
+	font-family: 'DM Sans', system-ui, sans-serif;
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+.taste-type-chip--active {
+	border-color: var(--gold-dim);
+	background: rgba(212, 168, 75, 0.12);
+	color: var(--text);
+}
+.taste-type-count {
+	color: var(--text-muted);
+	font-size: 10px;
+	font-weight: 500;
+}
+.taste-dot.taste-dot--ghost {
+	width: 7px;
+	height: 7px;
+	margin: -3.5px 0 0 -3.5px;
+	border: 0;
+	background: var(--text-dim);
+	opacity: 0.18;
+	box-shadow: none;
+	pointer-events: none;
+	z-index: 0;
+}
 .taste-map-detail {
 	margin-top: 10px;
 	padding: 10px 12px;

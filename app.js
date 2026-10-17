@@ -27,6 +27,7 @@
 	var journalShowAll = false;
 	var journalPalateOpen = true;
 	var journalRatingFilter = null; // a half-star bucket (e.g. 4.5) picked by tapping the rating distribution
+	var journalTypeFilter = null; // a taste-map type key (e.g. 'ipa') picked with the taste-map buttons
 	var JOURNAL_SORTS = [
 		{ key: 'date', icon: '📅', label: 'Date' },
 		{ key: 'rating', icon: '★', label: 'Rating' },
@@ -133,12 +134,13 @@
 		return r == null ? null : Math.round(r * 2) / 2;
 	}
 
-	/** Beers matching the search and every active filter. skip = 'rating' leaves the score filter out, so the rating chart still shows the full spread. */
+	/** Beers matching the search and every active filter. skip = 'rating' or 'type' leaves that filter out, so its own chart still shows the full spread. */
 	function filteredBeers(skip) {
 		var query = (get('searchInput') && get('searchInput').value || '').trim().toLowerCase();
 		var hasStyle = activeFilters.style.size > 0;
 		var hasBrewery = activeFilters.brewery.size > 0;
 		var byRating = journalRatingFilter != null && skip !== 'rating';
+		var byType = journalTypeFilter != null && skip !== 'type';
 
 		return ratingBeers.filter(function (b) {
 			if (query) {
@@ -150,12 +152,13 @@
 			if (hasStyle && !activeFilters.style.has(b.beer_type || '')) return false;
 			if (hasBrewery && !activeFilters.brewery.has(b.brewery_name || '')) return false;
 			if (byRating && ratingBucket(b) !== journalRatingFilter) return false;
+			if (byType && tasteTypeOf(b) !== journalTypeFilter) return false;
 			return true;
 		});
 	}
 
 	function updateFilterCount(visible, total) {
-		var n = activeFilters.style.size + activeFilters.brewery.size + (journalRatingFilter != null ? 1 : 0);
+		var n = activeFilters.style.size + activeFilters.brewery.size + (journalRatingFilter != null ? 1 : 0) + (journalTypeFilter != null ? 1 : 0);
 		var toggleEl = get('filterToggle');
 		if (toggleEl) toggleEl.classList.toggle('has-filters', n > 0);
 		var badge = get('filterBadge');
@@ -168,11 +171,15 @@
 		renderActiveFilterPills();
 	}
 
-	/** Active brewery/style/score filters as removable pills under the search bar. */
+	/** Active brewery/style/score/type filters as removable pills under the search bar. */
 	function renderActiveFilterPills() {
 		var el = get('activeFilterPills');
 		if (!el) return;
 		var html = '';
+		if (journalTypeFilter != null) {
+			html += '<button type="button" class="filter-pill" data-filter-key="type" data-value="">' +
+				'<span class="filter-pill-name">' + escapeHtml(tasteTypeLabel(journalTypeFilter)) + '</span><span class="filter-pill-x" aria-hidden="true">✕</span></button>';
+		}
 		if (journalRatingFilter != null) {
 			html += '<button type="button" class="filter-pill" data-filter-key="rating" data-value="">' +
 				'<span class="filter-pill-name">' + journalRatingFilter + '★</span><span class="filter-pill-x" aria-hidden="true">✕</span></button>';
@@ -329,7 +336,7 @@
 					? '<div class="histogram-wrap">' + buildHistogram(spread.rated, journalRatingFilter) + '</div>'
 					: '<p class="palate-empty">No rated beers match these filters.</p>') +
 				'</div>' +
-				buildTasteMapHtml(viewStats ? viewStats.rated : []) +
+				buildTasteMapHtml(filteredBeers('type')) +
 				(isFiltered ? buildJournalCompareHtml(viewStats) : buildJournalTotalsHtml()) +
 				'</div>';
 		}
@@ -684,40 +691,65 @@
 		return cat !== 'na_low' && cat !== 'porter_stout' && cat !== 'barleywine' && cat !== 'strong';
 	}
 
-	var TASTE_MAP_LEGEND = [
-		{ key: 'na_low', label: 'NA / ≤1.2%' },
-		{ key: 'session', label: 'Session' },
-		{ key: 'lager', label: 'Lager' },
-		{ key: 'wheat', label: 'Wheat' },
-		{ key: 'pale', label: 'Pale / bitter' },
-		{ key: 'ipa', label: 'IPA' },
-		{ key: 'belgian', label: 'Belgian' },
-		{ key: 'brown_amber', label: 'Brown / amber' },
-		{ key: 'porter_stout', label: 'Porter / stout' },
-		{ key: 'barleywine', label: 'Barleywine' },
-		{ key: 'sours', label: 'Sour' },
-		{ key: 'fruited', label: 'Fruited' },
-		{ key: 'strong', label: 'Strong (other)' },
-		{ key: 'other', label: 'Other' }
+	/** Taste-map type buttons: the 14 dot colours folded into 9 types. swatch = the dot colour shown on the button. */
+	var TASTE_TYPES = [
+		{ key: 'ipa', label: 'IPA', swatch: 'ipa', cats: ['ipa'] },
+		{ key: 'pale', label: 'Pale & bitter', swatch: 'pale', cats: ['pale'] },
+		{ key: 'lager', label: 'Lager', swatch: 'lager', cats: ['lager'] },
+		{ key: 'dark', label: 'Dark', swatch: 'porter_stout', cats: ['porter_stout', 'brown_amber', 'barleywine'] },
+		{ key: 'sour', label: 'Sour & fruit', swatch: 'sours', cats: ['sours', 'fruited'] },
+		{ key: 'wheat', label: 'Wheat', swatch: 'wheat', cats: ['wheat'] },
+		{ key: 'belgian', label: 'Belgian', swatch: 'belgian', cats: ['belgian'] },
+		{ key: 'na', label: 'Alcohol-free', swatch: 'na_low', cats: ['na_low'] },
+		{ key: 'other', label: 'Other', swatch: 'other', cats: ['session', 'strong', 'other'] }
 	];
 
-	function buildTasteMapHtml(rated) {
+	function tasteTypeOf(b) {
+		var cat = tasteMapStyleCategory(b);
+		for (var i = 0; i < TASTE_TYPES.length; i++) {
+			if (TASTE_TYPES[i].cats.indexOf(cat) >= 0) return TASTE_TYPES[i].key;
+		}
+		return 'other';
+	}
+
+	function tasteTypeLabel(key) {
+		for (var i = 0; i < TASTE_TYPES.length; i++) {
+			if (TASTE_TYPES[i].key === key) return TASTE_TYPES[i].label;
+		}
+		return key;
+	}
+
+	/** Rated beers with a usable ABV, as plot points. */
+	function tasteMapPoints(beers) {
 		var pts = [];
-		(rated || []).forEach(function (b) {
+		(beers || []).forEach(function (b) {
 			var abv = parseFloat(b.beer_abv);
 			var r = normaliseUserRatingScoreForStorage(b.rating_score);
 			if (r == null || isNaN(abv) || abv < 0) return;
 			pts.push({ b: b, abv: abv, r: r });
 		});
-		if (pts.length < 3) {
+		return pts;
+	}
+
+	/**
+	 * Taste map: your score (up) by ABV (across). Type buttons narrow the map and the list to one type;
+	 * the other types stay as faint dots. Axes come from the whole journal, so dots stay put when filtering.
+	 */
+	function buildTasteMapHtml(beers) {
+		var allPts = tasteMapPoints(ratingBeers);
+		if (allPts.length < 3) {
 			return '<div class="dash-card wide taste-map-card taste-map-card--empty">' +
 				'<div class="dash-lbl">Taste map</div>' +
 				'<p class="taste-map-empty-msg">Need at least <strong>three</strong> rated check-ins with <strong>ABV</strong> (including 0% NA) to plot your map.</p>' +
 				'</div>';
 		}
+		var basePts = tasteMapPoints(beers);
+		var type = journalTypeFilter;
+		var shownPts = type ? basePts.filter(function (p) { return tasteTypeOf(p.b) === type; }) : basePts;
+		var ghostPts = type ? basePts.filter(function (p) { return tasteTypeOf(p.b) !== type; }) : [];
 
-		var abvs = pts.map(function (p) { return p.abv; });
-		var rs = pts.map(function (p) { return p.r; });
+		var abvs = allPts.map(function (p) { return p.abv; });
+		var rs = allPts.map(function (p) { return p.r; });
 		var minAbv = Math.min.apply(null, abvs);
 		var maxAbv = Math.max.apply(null, abvs);
 		var minR = Math.min.apply(null, rs);
@@ -744,8 +776,19 @@
 		var cellW = plotW / COLS;
 		var cellH = plotH / ROWS;
 
+		function dotStyle(p) {
+			var abvN = (p.abv - minAbv) / (maxAbv - minAbv);
+			var ratN = (p.r - minR) / (maxR - minR);
+			var h = tasteMapHash(String(p.b.item_id != null ? p.b.item_id : '') + '\t' + (p.b.beer_name || ''));
+			var jx = ((h % 7) - 3) * 0.45;
+			var jy = ((Math.floor(h / 7) % 7) - 3) * 0.45;
+			var left = Math.max(3.5, Math.min(96.5, origin + abvN * plotW + jx));
+			var top = Math.max(3.5, Math.min(96.5, origin + (1 - ratN) * plotH + jy));
+			return 'left:' + left.toFixed(2) + '%;top:' + top.toFixed(2) + '%';
+		}
+
 		var cells = {};
-		pts.forEach(function (p) {
+		shownPts.forEach(function (p) {
 			var abvN = (p.abv - minAbv) / (maxAbv - minAbv);
 			var ratN = (p.r - minR) / (maxR - minR);
 			var col = Math.min(COLS - 1, Math.floor(abvN * COLS));
@@ -758,16 +801,14 @@
 			cells[key].sum += p.r;
 		});
 
-		var bestKey = null;
-		var minCountForSpot = pts.length >= 8 ? 2 : 1;
+		var minCountForSpot = shownPts.length >= 8 ? 2 : 1;
 		function pickBestSpot(minC) {
 			var bk = null;
 			var bs = -1;
 			Object.keys(cells).forEach(function (k) {
 				var c = cells[k];
 				if (c.count < minC) return;
-				var avg = c.sum / c.count;
-				var score = c.count * avg;
+				var score = c.count * (c.sum / c.count);
 				if (score > bs) {
 					bs = score;
 					bk = k;
@@ -775,74 +816,71 @@
 			});
 			return bk;
 		}
-		bestKey = pickBestSpot(minCountForSpot);
+		var bestKey = pickBestSpot(minCountForSpot);
 		if (bestKey == null && minCountForSpot > 1) {
 			bestKey = pickBestSpot(1);
 		}
 
+		var typeLabel = type ? escapeHtml(tasteTypeLabel(type)) : '';
 		var spotHtml = '';
-		var captionHtml = '';
+		var captionHtml = '<div class="taste-map-sweet-caption">No ' + (type ? typeLabel + ' ' : '') + 'beers with an ABV in this view</div>';
 		if (bestKey != null) {
 			var bc = cells[bestKey];
-			var sl = origin + bc.col * cellW;
-			var st = origin + bc.row * cellH;
 			var avgR = bc.sum / bc.count;
 			var abvLo = minAbv + (bc.col / COLS) * (maxAbv - minAbv);
 			var abvHi = minAbv + ((bc.col + 1) / COLS) * (maxAbv - minAbv);
-			spotHtml = '<div class="taste-map-sweet" style="left:' + sl + '%;top:' + st + '%;width:' + cellW + '%;height:' + cellH + '%" aria-hidden="true"></div>';
-			captionHtml = '<div class="taste-map-sweet-caption">Sweet spot · ~' + abvLo.toFixed(1) + '–' + abvHi.toFixed(1) + '% ABV · ~' + avgR.toFixed(1) + '★ avg</div>';
+			spotHtml = '<div class="taste-map-sweet" style="left:' + (origin + bc.col * cellW) + '%;top:' + (origin + bc.row * cellH) + '%;width:' + cellW + '%;height:' + cellH + '%" aria-hidden="true"></div>';
+			captionHtml = '<div class="taste-map-sweet-caption">' + (type ? typeLabel + ' sweet spot' : 'Sweet spot') +
+				' · ~' + abvLo.toFixed(1) + '–' + abvHi.toFixed(1) + '% ABV · ~' + avgR.toFixed(1) + '★ avg · ' + bc.count + ' beer' + (bc.count === 1 ? '' : 's') + '</div>';
 		}
 
-		var seenCat = {};
 		var seenHighAbvRing = false;
 		var dotsHtml = '';
-		pts.forEach(function (p) {
-			var abvN = (p.abv - minAbv) / (maxAbv - minAbv);
-			var ratN = (p.r - minR) / (maxR - minR);
-			var h = tasteMapHash(String(p.b.item_id != null ? p.b.item_id : '') + '\t' + (p.b.beer_name || ''));
-			var jx = ((h % 7) - 3) * 0.45;
-			var jy = ((Math.floor(h / 7) % 7) - 3) * 0.45;
-			var left = origin + abvN * plotW + jx;
-			var top = origin + (1 - ratN) * plotH + jy;
-			left = Math.max(3.5, Math.min(96.5, left));
-			top = Math.max(3.5, Math.min(96.5, top));
+		ghostPts.forEach(function (p) {
+			dotsHtml += '<span class="taste-dot taste-dot--ghost" style="' + dotStyle(p) + '" aria-hidden="true"></span>';
+		});
+		shownPts.forEach(function (p) {
 			var cat = tasteMapStyleCategory(p.b);
-			seenCat[cat] = true;
 			var highRing = tasteMapUseHighAbvRing(cat, p.abv);
 			if (highRing) seenHighAbvRing = true;
-			var ariaName = beerDisplayName(p.b);
 			dotsHtml +=
 				'<button type="button" class="taste-dot taste-dot--' + cat + (highRing ? ' taste-dot--high-abv' : '') + '" ' +
-				'style="left:' + left.toFixed(2) + '%;top:' + top.toFixed(2) + '%" ' +
+				'style="' + dotStyle(p) + '" ' +
 				'data-n="' + encodeURIComponent(p.b.beer_name || '') + '" ' +
 				'data-w="' + encodeURIComponent(p.b.brewery_name || '') + '" ' +
 				'data-abv="' + p.abv + '" data-r="' + p.r + '" ' +
-				'aria-label="' + escapeHtml('Show: ' + ariaName) + '"></button>';
+				'aria-label="' + escapeHtml('Show: ' + beerDisplayName(p.b)) + '"></button>';
 		});
 
-		var legendHtml = '<div class="taste-map-legend">';
-		TASTE_MAP_LEGEND.forEach(function (leg) {
-			if (!seenCat[leg.key]) return;
-			legendHtml +=
-				'<span class="taste-legend-item"><span class="taste-legend-swatch taste-legend-swatch--' + leg.key + '"></span>' + leg.label + '</span>';
+		var counts = {};
+		basePts.forEach(function (p) {
+			var k = tasteTypeOf(p.b);
+			counts[k] = (counts[k] || 0) + 1;
 		});
-		if (seenHighAbvRing) {
-			legendHtml += '<span class="taste-legend-item taste-legend-item--note"><span class="taste-legend-swatch taste-legend-swatch--ring-demo" aria-hidden="true"></span>8%+ ABV ring</span>';
+		function typeChip(key, label, swatch, n) {
+			var on = (key || null) === type;
+			return '<button type="button" class="taste-type-chip' + (on ? ' taste-type-chip--active' : '') + '" data-type="' + key + '" aria-pressed="' + on + '">' +
+				(swatch ? '<span class="taste-legend-swatch taste-legend-swatch--' + swatch + '"></span>' : '') +
+				escapeHtml(label) + ' <span class="taste-type-count">' + n + '</span></button>';
 		}
-		legendHtml += '</div>';
+		var chipsHtml = '<div class="taste-type-chips" role="toolbar" aria-label="Beer types">' + typeChip('', 'All', '', basePts.length);
+		TASTE_TYPES.forEach(function (t) {
+			if (counts[t.key] || t.key === type) chipsHtml += typeChip(t.key, t.label, t.swatch, counts[t.key] || 0);
+		});
+		chipsHtml += '</div>';
 
-		var xMin = minAbv.toFixed(1);
-		var xMax = maxAbv.toFixed(1);
-		var yMin = minR.toFixed(1);
-		var yMax = maxR.toFixed(1);
+		var ringNote = seenHighAbvRing
+			? '<div class="taste-map-legend"><span class="taste-legend-item taste-legend-item--note"><span class="taste-legend-swatch taste-legend-swatch--ring-demo" aria-hidden="true"></span>8%+ ABV ring</span></div>'
+			: '';
 
 		return '<div class="dash-card wide taste-map-card">' +
-			'<div class="dash-lbl">Taste map</div>' +
-			'<p class="taste-map-blurb">Your ratings by ABV (across) and your score (up). Colours = style; bright ring = 8%+ ABV. Tap a dot.</p>' +
+			'<div class="dash-lbl dash-lbl--split"><span>Taste map</span><span class="dash-hint">types filter the list too</span></div>' +
+			'<p class="taste-map-blurb">Your score (up) by ABV (across). Tap a dot to see the beer.</p>' +
+			chipsHtml +
 			captionHtml +
 			'<div class="taste-map-body">' +
 			'<div class="taste-map-y-axis" aria-hidden="true">' +
-			'<span>' + yMax + '★</span><span>' + yMin + '★</span>' +
+			'<span>' + maxR.toFixed(1) + '★</span><span>' + minR.toFixed(1) + '★</span>' +
 			'</div>' +
 			'<div class="taste-map-plot" role="img" aria-label="Scatter of journal beers: ABV versus your rating">' +
 			'<div class="taste-map-grid-lines" aria-hidden="true"></div>' +
@@ -851,9 +889,9 @@
 			'</div>' +
 			'</div>' +
 			'<div class="taste-map-x-axis" aria-hidden="true">' +
-			'<span>' + xMin + '%</span><span>ABV</span><span>' + xMax + '%</span>' +
+			'<span>' + minAbv.toFixed(1) + '%</span><span>ABV</span><span>' + maxAbv.toFixed(1) + '%</span>' +
 			'</div>' +
-			legendHtml +
+			ringNote +
 			'<div id="tasteMapDetail" class="taste-map-detail" hidden></div>' +
 			'</div>';
 	}
@@ -954,6 +992,7 @@
 		activeFilters.style.clear();
 		activeFilters.brewery.clear();
 		journalRatingFilter = null;
+		journalTypeFilter = null;
 		refreshChips();
 		render();
 	}
@@ -1120,6 +1159,7 @@
 				var val = '';
 				try { val = decodeURIComponent(pill.getAttribute('data-value') || ''); } catch (e1) {}
 				if (key === 'rating') journalRatingFilter = null;
+				else if (key === 'type') journalTypeFilter = null;
 				else if (activeFilters[key]) activeFilters[key].delete(val);
 				refreshChips();
 				render();
@@ -1167,6 +1207,16 @@
 					journalPalateOpen = !journalPalateOpen;
 					saveJournalViewPrefs();
 					renderPalate();
+					return;
+				}
+				var typeChip = e.target.closest('.taste-type-chip');
+				if (typeChip) {
+					var picked = typeChip.getAttribute('data-type') || null;
+					journalTypeFilter = (picked && journalTypeFilter !== picked) ? picked : null;
+					journalShowAll = false;
+					render();
+					var mapCard = jPalate.querySelector('.taste-map-card');
+					if (mapCard) mapCard.scrollIntoView({ block: 'center' });
 					return;
 				}
 				var bar = e.target.closest('.hist-col[data-rating]');
