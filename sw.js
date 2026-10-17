@@ -1,6 +1,6 @@
 /* My Beer – cache app shell for offline use. User data (beer-in-stock.json) is loaded via file picker, not cached. */
 
-var CACHE_NAME = 'my-beer-v7';
+var CACHE_NAME = 'my-beer-v8';
 var SHELL_URLS = ['index.html', 'styles.css', 'app.js', 'manifest.json'];
 
 self.addEventListener('install', function (e) {

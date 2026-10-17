@@ -262,12 +262,31 @@
 	}
 
 	function updateFilterCount(visible, total) {
-		var el = get('filterCount');
-		if (!el) return;
 		var n = activeFilters.style.size + activeFilters.brewery.size;
 		var toggleEl = get('filterToggle');
 		if (toggleEl) toggleEl.classList.toggle('has-filters', n > 0);
-		el.textContent = n === 0 ? 'showing all' : visible + ' of ' + total + ' · ' + n + ' filter' + (n > 1 ? 's' : '');
+		var badge = get('filterBadge');
+		if (badge) {
+			badge.textContent = n > 0 ? String(n) : '';
+			badge.classList.toggle('hidden', n === 0);
+		}
+		var el = get('filterCount');
+		if (el) el.textContent = visible < total ? visible + ' of ' + total : 'All ' + total;
+		renderActiveFilterPills();
+	}
+
+	/** Active brewery/style filters as removable pills under the search bar. */
+	function renderActiveFilterPills() {
+		var el = get('activeFilterPills');
+		if (!el) return;
+		var html = '';
+		['brewery', 'style'].forEach(function (key) {
+			activeFilters[key].forEach(function (val) {
+				html += '<button type="button" class="filter-pill" data-filter-key="' + key + '" data-value="' + encodeURIComponent(val) + '">' +
+					'<span class="filter-pill-name">' + escapeHtml(val) + '</span><span class="filter-pill-x" aria-hidden="true">✕</span></button>';
+			});
+		});
+		el.innerHTML = html;
 	}
 
 	function escapeHtml(s) {
@@ -2032,6 +2051,20 @@
 				updateModeUI();
 			});
 		});
+
+		var pills = get('activeFilterPills');
+		if (pills) {
+			pills.addEventListener('click', function (e) {
+				var pill = e.target.closest('.filter-pill');
+				if (!pill) return;
+				var key = pill.getAttribute('data-filter-key');
+				var val = '';
+				try { val = decodeURIComponent(pill.getAttribute('data-value') || ''); } catch (e1) {}
+				if (activeFilters[key]) activeFilters[key].delete(val);
+				refreshChips();
+				render();
+			});
+		}
 
 		var btnUpload = get('btnUpload');
 		if (btnUpload) btnUpload.addEventListener('click', function () { showLanding(); });
